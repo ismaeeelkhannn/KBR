@@ -33,6 +33,8 @@ The Docker Compose setup runs PostgreSQL only; run the Next.js app separately wi
 
 The database is available on `localhost` at the port configured by `POSTGRES_PORT` (default `5432`).
 
+The Prisma schema is in `prisma/schema.prisma` and reads its connection string from `DATABASE_URL`. Generate the Prisma Client with `npx prisma generate`, then check the database connection with `npm run db:check` after PostgreSQL is running. The schema currently contains no models; database models will be added in a later batch.
+
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
 ## Learn More

@@ -1,0 +1,12 @@
+// Khan Burger - Prisma schema
+// Batch 2: database connection setup only.
+// Batch 3 will add users, roles, branches, and staff models.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
