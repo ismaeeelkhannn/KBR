@@ -18,6 +18,17 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
+## Local PostgreSQL database
+
+The Docker Compose setup runs PostgreSQL only; run the Next.js app separately with Node.
+
+1. Copy `.env.example` to `.env` and set a local database password.
+2. Start PostgreSQL with `docker compose up -d`.
+3. Check startup with `docker compose ps`; PostgreSQL is ready when its health status is `healthy`.
+4. Stop the container with `docker compose down`. The `kbr_pgdata` volume keeps the database data.
+
+The database is available on `localhost` at the port configured by `POSTGRES_PORT` (default `5432`).
+
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
 ## Learn More
