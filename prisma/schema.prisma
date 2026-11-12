@@ -161,3 +161,66 @@ model Employee {
 
   @@index([branchId])
 }
+
+// ---------- Catalog (Batch 6) ----------
+// Rule: price hamesha paisa (Int). Price badalne par naya PriceVersion banega, purana update nahi hoga.
+
+model Category {
+  id        String    @id @default(cuid())
+  code      String    @unique
+  name      String
+  sortOrder Int       @default(0)
+  isActive  Boolean   @default(true)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  products Product[]
+}
+
+model Product {
+  id          String    @id @default(cuid())
+  categoryId  String
+  code        String    @unique
+  name        String
+  description String?
+  isActive    Boolean   @default(true)
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  category Category         @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  variants ProductVariant[]
+
+  @@index([categoryId])
+}
+
+model ProductVariant {
+  id        String    @id @default(cuid())
+  productId String
+  code      String    @unique
+  name      String
+  isActive  Boolean   @default(true)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  product Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
+  prices  PriceVersion[]
+
+  @@index([productId])
+}
+
+model PriceVersion {
+  id            String   @id @default(cuid())
+  variantId     String
+  amountPaisa   Int
+  effectiveFrom DateTime @default(now())
+  isVerified    Boolean  @default(false) // owner verify kare to true
+  note          String?
+  createdAt     DateTime @default(now())
+
+  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  @@index([variantId, effectiveFrom])
+}
