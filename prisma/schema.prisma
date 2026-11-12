@@ -69,12 +69,12 @@ model User {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  role              Role               @relation(fields: [roleId], references: [id], onDelete: Restrict)
-  branchAccess      UserBranchAccess[]
-  sessions          Session[]
-  employee          Employee?
-  orders            Order[]
-  orderStatusEvents OrderStatusEvent[]
+  role         Role               @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  branchAccess UserBranchAccess[]
+  sessions     Session[]
+  employee     Employee?
+  orders       Order[]
+  statusEvents OrderStatusEvent[]
 
   @@index([roleId])
 }
