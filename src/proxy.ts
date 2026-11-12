@@ -8,7 +8,7 @@ import { NextResponse, type NextRequest } from "next/server";
  */
 
 const SESSION_COOKIE_NAME = "kbr_session";
-const PROTECTED_PREFIXES = ["/dashboard"];
+const PROTECTED_PREFIXES = ["/dashboard", "/kitchen"];
 
 export default function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -36,5 +36,5 @@ export default function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*"],
+  matcher: ["/dashboard/:path*", "/kitchen/:path*"],
 };
