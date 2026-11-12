@@ -1,8 +1,12 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import { getCurrentUser } from "@/modules/auth/session";
 import { LogoutButton } from "./logout-button";
 
-export default async function DashboardPage() {
+async function DashboardContent() {
+  await connection();
+
   const user = await getCurrentUser();
 
   if (!user) {
@@ -23,5 +27,19 @@ export default async function DashboardPage() {
         Ye ek placeholder page hai. Asli dashboard Batch 8 ke baad banega.
       </p>
     </main>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="flex min-h-screen items-center justify-center p-8">
+          <p>Dashboard load ho raha hai...</p>
+        </main>
+      }
+    >
+      <DashboardContent />
+    </Suspense>
   );
 }
