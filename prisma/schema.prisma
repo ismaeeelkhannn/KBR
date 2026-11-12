@@ -73,6 +73,7 @@ model User {
   branchAccess UserBranchAccess[]
   sessions     Session[]
   employee     Employee?
+  orders       Order[]
 
   @@index([roleId])
 }
@@ -111,6 +112,7 @@ model Branch {
   userAccess    UserBranchAccess[]
   employees     Employee[]
   cashRegisters CashRegister[]
+  orders        Order[]
 }
 
 model UserBranchAccess {
@@ -205,8 +207,9 @@ model ProductVariant {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  product Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
-  prices  PriceVersion[]
+  product    Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
+  prices     PriceVersion[]
+  orderItems OrderItem[]
 
   @@index([productId])
 }
@@ -220,7 +223,67 @@ model PriceVersion {
   note          String?
   createdAt     DateTime @default(now())
 
-  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  variant    ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  orderItems OrderItem[]
 
   @@index([variantId, effectiveFrom])
+}
+
+// ---------- Orders (Batch 7) ----------
+// Rules:
+// - Price snapshot: order item mein unitPricePaisa save hota hai. Baad mein price badle to purana order nahi badlega.
+// - Idempotency: idempotencyKey unique hai. Same key par dobara duplicate order nahi banega.
+// - Totals sirf server calculate karta hai.
+
+enum OrderStatus {
+  CONFIRMED
+  PAID
+  CANCELLED
+}
+
+enum OrderType {
+  DINE_IN
+  TAKEAWAY
+  DELIVERY
+}
+
+model Order {
+  id             String      @id @default(cuid())
+  orderNumber    String
+  branchId       String
+  createdById    String
+  orderType      OrderType   @default(TAKEAWAY)
+  status         OrderStatus @default(CONFIRMED)
+  idempotencyKey String      @unique
+  subtotalPaisa  Int
+  discountPaisa  Int         @default(0)
+  totalPaisa     Int
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  branch    Branch      @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  createdBy User        @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  items     OrderItem[]
+
+  @@unique([branchId, orderNumber])
+  @@index([branchId, createdAt])
+}
+
+model OrderItem {
+  id                  String  @id @default(cuid())
+  orderId             String
+  variantId           String
+  priceVersionId      String
+  productNameSnapshot String
+  variantNameSnapshot String
+  unitPricePaisa      Int
+  quantity            Int
+  lineTotalPaisa      Int
+  note                String?
+
+  order        Order          @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  variant      ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  priceVersion PriceVersion   @relation(fields: [priceVersionId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
 }
