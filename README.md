@@ -33,7 +33,9 @@ The Docker Compose setup runs PostgreSQL only; run the Next.js app separately wi
 
 The database is available on `localhost` at the port configured by `POSTGRES_PORT` (default `5432`).
 
-The Prisma schema is in `prisma/schema.prisma` and reads its connection string from `DATABASE_URL`. Generate the Prisma Client with `npx prisma generate`, then check the database connection with `npm run db:check` after PostgreSQL is running. The schema currently contains no models; database models will be added in a later batch.
+The Prisma schema is in `prisma/schema.prisma` and reads its connection string from `DATABASE_URL`. After PostgreSQL is running, apply the schema with `npm run db:migrate`, generate the Prisma Client with `npm run db:generate`, and check the connection with `npm run db:check`. Run `npm run db:seed` to upsert the demo roles, permissions, branch, and cash registers. Set `DEMO_OWNER_USERNAME` and a 12+ character `DEMO_OWNER_PASSWORD` in `.env`, then run `npm run db:create-owner` to create the demo owner.
+
+Sign in at `/login` with the demo owner credentials to open the protected `/dashboard`. Use the dashboard's **Logout** button to revoke the current session and return to `/login`.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 

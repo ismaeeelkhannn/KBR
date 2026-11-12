@@ -1,6 +1,9 @@
 // Khan Burger - Prisma schema
-// Batch 2: database connection setup only.
-// Batch 3 will add users, roles, branches, and staff models.
+// Batch 3: Identity (users, roles, permissions), branches, sessions, employees, cash registers.
+// Rules:
+// - Money hamesha paisa (Int) mein. Kabhi float nahi.
+// - Branch aur user hard delete nahi honge (isActive / deletedAt).
+// - Financial aur audit tables mein cascade delete nahi.
 
 generator client {
   provider = "prisma-client-js"
@@ -9,4 +12,152 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+  TERMINATED
+}
+
+// ---------- Identity & Access ----------
+
+model Role {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       User[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+
+  roles RolePermission[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  createdAt    DateTime @default(now())
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Restrict)
+
+  @@id([roleId, permissionId])
+}
+
+model User {
+  id               String    @id @default(cuid())
+  username         String    @unique
+  fullName         String
+  passwordHash     String
+  roleId           String
+  isActive         Boolean   @default(true)
+  failedLoginCount Int       @default(0)
+  lockedUntil      DateTime?
+  lastLoginAt      DateTime?
+  deletedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  role         Role               @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  branchAccess UserBranchAccess[]
+  sessions     Session[]
+  employee     Employee?
+
+  @@index([roleId])
+}
+
+model Session {
+  id         String    @id @default(cuid())
+  userId     String
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  lastSeenAt DateTime?
+  ipAddress  String?
+  userAgent  String?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// ---------- Branches ----------
+
+model Branch {
+  id        String    @id @default(cuid())
+  code      String    @unique
+  name      String
+  address   String?
+  phone     String?
+  timezone  String    @default("Asia/Karachi")
+  isActive  Boolean   @default(true)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  userAccess    UserBranchAccess[]
+  employees     Employee[]
+  cashRegisters CashRegister[]
+}
+
+model UserBranchAccess {
+  userId    String
+  branchId  String
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  @@id([userId, branchId])
+  @@index([branchId])
+}
+
+model CashRegister {
+  id        String   @id @default(cuid())
+  branchId  String
+  code      String
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  @@unique([branchId, code])
+}
+
+// ---------- Staff ----------
+
+model Employee {
+  id                 String         @id @default(cuid())
+  employeeCode       String         @unique
+  userId             String?        @unique
+  branchId           String
+  fullName           String
+  phone              String?
+  jobTitle           String
+  joiningDate        DateTime
+  monthlySalaryPaisa Int
+  status             EmployeeStatus @default(ACTIVE)
+  deletedAt          DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  user   User?  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  @@index([branchId])
 }

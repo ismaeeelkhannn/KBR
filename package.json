@@ -11,11 +11,15 @@
     "db:down": "docker compose down",
     "db:logs": "docker compose logs -f postgres",
     "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
     "db:check": "tsx scripts/check-db.ts",
+    "db:seed": "prisma db seed",
+    "db:create-owner": "tsx scripts/create-owner.ts",
     "db:studio": "prisma studio"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
+    "argon2": "^0.45.2",
     "next": "16.4.6",
     "react": "19.3.0",
     "react-dom": "19.3.0",
@@ -33,5 +37,11 @@
     "tailwindcss": "4.3.3",
     "tsx": "^4.23.15",
     "typescript": "^5"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "allowScripts": {
+    "argon2@0.45.2": true
   }
 }
