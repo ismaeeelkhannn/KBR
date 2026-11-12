@@ -69,11 +69,12 @@ model User {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  role         Role               @relation(fields: [roleId], references: [id], onDelete: Restrict)
-  branchAccess UserBranchAccess[]
-  sessions     Session[]
-  employee     Employee?
-  orders       Order[]
+  role              Role               @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  branchAccess      UserBranchAccess[]
+  sessions          Session[]
+  employee          Employee?
+  orders            Order[]
+  orderStatusEvents OrderStatusEvent[]
 
   @@index([roleId])
 }
@@ -264,9 +265,10 @@ model Order {
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
-  branch    Branch      @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  createdBy User        @relation(fields: [createdById], references: [id], onDelete: Restrict)
-  items     OrderItem[]
+  branch       Branch             @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  createdBy    User               @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  items        OrderItem[]
+  statusEvents OrderStatusEvent[]
 
   @@unique([branchId, orderNumber])
   @@index([branchId, createdAt])
@@ -289,4 +291,22 @@ model OrderItem {
   priceVersion PriceVersion   @relation(fields: [priceVersionId], references: [id], onDelete: Restrict)
 
   @@index([orderId])
+}
+
+// ---------- Order status history (Batch 8) ----------
+// Har status change ka record. Delete ya update nahi hota.
+
+model OrderStatusEvent {
+  id          String      @id @default(cuid())
+  orderId     String
+  fromStatus  OrderStatus
+  toStatus    OrderStatus
+  changedById String
+  reason      String?
+  createdAt   DateTime    @default(now())
+
+  order     Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  changedBy User  @relation(fields: [changedById], references: [id], onDelete: Restrict)
+
+  @@index([orderId, createdAt])
 }
