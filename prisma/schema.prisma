@@ -237,6 +237,9 @@ model PriceVersion {
 
 enum OrderStatus {
   CONFIRMED
+  PREPARING
+  READY
+  SERVED
   PAID
   CANCELLED
 }
