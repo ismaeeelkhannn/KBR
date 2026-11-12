@@ -37,6 +37,8 @@ The Prisma schema is in `prisma/schema.prisma` and reads its connection string f
 
 Sign in at `/login` with the demo owner credentials to open the protected `/dashboard`. Use the dashboard's **Logout** button to revoke the current session and return to `/login`.
 
+Users with kitchen permissions can open `/kitchen` to monitor active orders for their accessible branches. The board refreshes every five seconds and supports the configured kitchen status transitions.
+
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
 ## Learn More
