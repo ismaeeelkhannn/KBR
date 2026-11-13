@@ -82,6 +82,7 @@ model User {
   closedShifts      CashShift[] @relation("ShiftCloser")
   payments         Payment[]    @relation("PaymentCreator")
   stockMovements StockMovement[] @relation("StockCreator")
+  recipeVersions RecipeVersion[] @relation("RecipeCreator")
 
   @@index([roleId])
 }
@@ -221,7 +222,7 @@ model ProductVariant {
   product    Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
   prices     PriceVersion[]
   orderItems OrderItem[]
-  recipeLines RecipeLine[]
+  recipeVersions RecipeVersion[]
 
   @@index([productId])
 }
@@ -291,6 +292,7 @@ model OrderItem {
   orderId             String
   variantId           String
   priceVersionId      String
+  recipeVersionId     String?
   productNameSnapshot String
   variantNameSnapshot String
   unitPricePaisa      Int
@@ -301,6 +303,7 @@ model OrderItem {
   order        Order          @relation(fields: [orderId], references: [id], onDelete: Restrict)
   variant      ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
   priceVersion PriceVersion   @relation(fields: [priceVersionId], references: [id], onDelete: Restrict)
+  recipeVersion RecipeVersion? @relation(fields: [recipeVersionId], references: [id], onDelete: Restrict)
 
   @@index([orderId])
 }
@@ -474,21 +477,8 @@ model InventoryItem {
   unit      String   // "g", "ml", "pcs"
   createdAt DateTime @default(now())
 
-  recipeLines    RecipeLine[]
+  recipeVersionLines RecipeVersionLine[]
   stockMovements StockMovement[]
-}
-
-// Ek variant ki recipe: ek ingredient ki kitni quantity (base unit mein) per 1 item
-model RecipeLine {
-  id              String @id @default(cuid())
-  variantId       String
-  inventoryItemId String
-  quantityBase    Int
-
-  variant       ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
-  inventoryItem InventoryItem  @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
-
-  @@unique([variantId, inventoryItemId])
 }
 
 // Append-only ledger. Quantity negative = stock out, positive = stock in.
@@ -510,4 +500,34 @@ model StockMovement {
   // Ek order par ek item ki ek hi deduction
   @@unique([orderId, inventoryItemId, type])
   @@index([branchId, inventoryItemId])
+}
+
+// ---------- Recipe versions (Batch 12) ----------
+// Har recipe change naya version. Purana version kabhi edit nahi hota.
+
+model RecipeVersion {
+  id          String   @id @default(cuid())
+  variantId   String
+  version     Int
+  createdById String
+  createdAt   DateTime @default(now())
+
+  variant     ProductVariant     @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  createdBy   User               @relation("RecipeCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  lines       RecipeVersionLine[]
+  orderItems  OrderItem[]
+
+  @@unique([variantId, version])
+}
+
+model RecipeVersionLine {
+  id              String @id @default(cuid())
+  recipeVersionId String
+  inventoryItemId String
+  quantityBase    Int
+
+  recipeVersion RecipeVersion @relation(fields: [recipeVersionId], references: [id], onDelete: Restrict)
+  inventoryItem InventoryItem  @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+
+  @@unique([recipeVersionId, inventoryItemId])
 }
