@@ -81,7 +81,7 @@ model User {
   openedShifts      CashShift[] @relation("ShiftOpener")
   closedShifts      CashShift[] @relation("ShiftCloser")
   payments         Payment[]    @relation("PaymentCreator")
-  stockMovementsCreated StockMovement[] @relation("StockCreator")
+  stockMovements StockMovement[] @relation("StockCreator")
 
   @@index([roleId])
 }
