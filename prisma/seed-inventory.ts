@@ -78,19 +78,26 @@ async function main() {
     const variant = await prisma.productVariant.findUniqueOrThrow({
       where: { code: variantCode },
     });
-    for (const [ingredientCode, quantityBase] of Object.entries(lines)) {
-      const inventoryItemId = getInventoryItemId(ingredientCode);
-      await prisma.recipeLine.upsert({
-        where: {
-          variantId_inventoryItemId: {
-            variantId: variant.id,
-            inventoryItemId,
-          },
+    const existing = await prisma.recipeVersion.findFirst({
+      where: { variantId: variant.id },
+    });
+    if (existing) continue;
+
+    await prisma.recipeVersion.create({
+      data: {
+        variantId: variant.id,
+        version: 1,
+        createdById: owner.id,
+        lines: {
+          create: Object.entries(lines).map(
+            ([ingredientCode, quantityBase]) => ({
+              inventoryItemId: getInventoryItemId(ingredientCode),
+              quantityBase,
+            })
+          ),
         },
-        update: { quantityBase },
-        create: { variantId: variant.id, inventoryItemId, quantityBase },
-      });
-    }
+      },
+    });
   }
 
   for (const [code, quantity] of Object.entries(OPENING_STOCK)) {

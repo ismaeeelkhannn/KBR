@@ -6,6 +6,7 @@ import {
 import { writeAudit } from "@/modules/audit/audit";
 import { enqueueEvent } from "@/modules/outbox/outbox";
 import { CANCELLABLE_STATUSES } from "@/modules/kitchen/status";
+import { createWastageForOrder } from "@/modules/inventory/wastage.service";
 
 export class ApprovalError extends Error {
   status: number;
@@ -179,6 +180,10 @@ export async function decideApproval(
           `${current.status} order ab cancel nahi ho sakta`,
           409
         );
+      }
+
+      if (current.status === "PREPARING" || current.status === "READY") {
+        await createWastageForOrder(tx, order.id, userId, approval.reason);
       }
 
       const cancelled = await tx.order.updateMany({

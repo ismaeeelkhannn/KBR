@@ -4,6 +4,7 @@ import {
   userCanAccessBranch,
   userHasPermission,
 } from "@/modules/access-control/permissions";
+import { latestRecipeVersion } from "@/modules/recipes/recipe.service";
 import type { CreateOrderInput } from "./order.schemas";
 
 export class OrderError extends Error {
@@ -53,6 +54,7 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
   const lines: {
     variantId: string;
     priceVersionId: string;
+    recipeVersionId: string;
     productNameSnapshot: string;
     variantNameSnapshot: string;
     unitPricePaisa: number;
@@ -87,9 +89,15 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
       throw new OrderError(`Price set nahi: ${variant.name}`, 422);
     }
 
+    const recipe = await latestRecipeVersion(variant.id);
+    if (!recipe) {
+      throw new OrderError(`Recipe set nahi: ${variant.name}`, 422);
+    }
+
     lines.push({
       variantId: variant.id,
       priceVersionId: price.id,
+      recipeVersionId: recipe.id,
       productNameSnapshot: variant.product.name,
       variantNameSnapshot: variant.name,
       unitPricePaisa: price.amountPaisa,

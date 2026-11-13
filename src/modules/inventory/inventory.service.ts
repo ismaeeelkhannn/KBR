@@ -27,7 +27,10 @@ export async function getStockBalances(userId: string, branchId: string) {
   const items = await db.inventoryItem.findMany({ orderBy: { code: "asc" } });
   const sums = await db.stockMovement.groupBy({
     by: ["inventoryItemId"],
-    where: { branchId },
+    where: {
+      branchId,
+      type: { in: ["PURCHASE", "SALE_DEDUCTION", "ADJUSTMENT"] },
+    },
     _sum: { quantityBase: true },
   });
   const map = new Map(
@@ -56,8 +59,8 @@ export async function deductForOrder(
     where: { orderId },
     select: {
       quantity: true,
-      variantId: true,
       variant: { select: { name: true } },
+      recipeVersion: { select: { lines: true } },
     },
   });
 
@@ -67,11 +70,12 @@ export async function deductForOrder(
       throw new InventoryError("Order quantity ghalat hai", 422);
     }
 
-    const lines = await tx.recipeLine.findMany({
-      where: { variantId: item.variantId },
-    });
+    const lines = item.recipeVersion?.lines ?? [];
     if (lines.length === 0) {
-      throw new InventoryError(`Recipe set nahi: ${item.variant.name}`, 422);
+      throw new InventoryError(
+        `Recipe version missing: ${item.variant.name}`,
+        422
+      );
     }
     for (const line of lines) {
       if (!Number.isInteger(line.quantityBase) || line.quantityBase <= 0) {
