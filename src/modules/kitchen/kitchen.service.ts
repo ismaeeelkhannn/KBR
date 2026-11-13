@@ -4,6 +4,10 @@ import {
   userCanAccessBranch,
   userHasPermission,
 } from "@/modules/access-control/permissions";
+import {
+  deductForOrder,
+  InventoryError,
+} from "@/modules/inventory/inventory.service";
 import { ACTIVE_KITCHEN_STATUSES, ALLOWED_TRANSITIONS } from "./status";
 
 export class KitchenError extends Error {
@@ -90,6 +94,17 @@ export async function changeOrderStatus(
         "Order ka status abhi badal gaya. Refresh karein.",
         409
       );
+    }
+
+    if (to === "PREPARING") {
+      try {
+        await deductForOrder(tx, orderId, order.branchId, userId);
+      } catch (error) {
+        if (error instanceof InventoryError) {
+          throw new KitchenError(error.message, error.status);
+        }
+        throw error;
+      }
     }
 
     await tx.orderStatusEvent.create({
