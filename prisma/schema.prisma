@@ -80,7 +80,7 @@ model User {
   auditLogs          AuditLog[]
   openedShifts      CashShift[] @relation("ShiftOpener")
   closedShifts      CashShift[] @relation("ShiftCloser")
-  paymentsCreated  Payment[]    @relation("PaymentCreator")
+  payments         Payment[]    @relation("PaymentCreator")
 
   @@index([roleId])
 }
@@ -277,7 +277,7 @@ model Order {
   createdBy    User               @relation(fields: [createdById], references: [id], onDelete: Restrict)
   items        OrderItem[]
   statusEvents OrderStatusEvent[]
-  payment      Payment?
+  payments     Payment[]
 
   @@unique([branchId, orderNumber])
   @@index([branchId, createdAt])
