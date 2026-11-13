@@ -80,6 +80,7 @@ model User {
   auditLogs          AuditLog[]
   openedShifts      CashShift[] @relation("ShiftOpener")
   closedShifts      CashShift[] @relation("ShiftCloser")
+  paymentsCreated  Payment[]    @relation("PaymentCreator")
 
   @@index([roleId])
 }
@@ -276,6 +277,7 @@ model Order {
   createdBy    User               @relation(fields: [createdById], references: [id], onDelete: Restrict)
   items        OrderItem[]
   statusEvents OrderStatusEvent[]
+  payment      Payment?
 
   @@unique([branchId, orderNumber])
   @@index([branchId, createdAt])
@@ -411,7 +413,43 @@ model CashShift {
   cashRegister CashRegister @relation(fields: [cashRegisterId], references: [id], onDelete: Restrict)
   openedBy     User         @relation("ShiftOpener", fields: [openedById], references: [id], onDelete: Restrict)
   closedBy     User?        @relation("ShiftCloser", fields: [closedById], references: [id], onDelete: Restrict)
+  payments     Payment[]
 
   @@index([cashRegisterId, status])
   @@index([branchId, openedAt])
+}
+
+// ---------- Payments (Batch 10 Part 2) ----------
+
+enum PaymentMethod {
+  CASH
+  JAZZCASH
+  EASYPAISA
+  BANK_TRANSFER
+  CARD
+}
+
+enum PaymentStatus {
+  COMPLETED
+  REVERSED
+}
+
+// Ek order ki ek hi payment (abhi partial payment nahi). Reversal ke liye status badlega, row delete nahi hogi.
+model Payment {
+  id              String        @id @default(cuid())
+  orderId         String        @unique
+  cashShiftId     String
+  method          PaymentMethod
+  status          PaymentStatus @default(COMPLETED)
+  amountPaisa     Int
+  reference       String?
+  idempotencyKey  String        @unique
+  createdById     String
+  createdAt       DateTime      @default(now())
+
+  order     Order     @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  cashShift CashShift @relation(fields: [cashShiftId], references: [id], onDelete: Restrict)
+  createdBy User      @relation("PaymentCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([cashShiftId, method, status])
 }
