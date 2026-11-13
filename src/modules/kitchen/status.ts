@@ -2,12 +2,11 @@ import type { OrderStatus } from "@prisma/client";
 
 /**
  * Status transitions ka single source of truth.
- * Jo transition yahan nahi, wo kisi bhi API se allowed nahi.
- * CANCELLED abhi sirf CONFIRMED se. PREPARING ke baad cancel ke liye
- * approval workflow chahiye (agle batch mein).
+ * CANCELLED yahan se nahi hota. Cancel sirf approval workflow se hota hai
+ * (modules/approvals/approval.service.ts).
  */
 export const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
-  CONFIRMED: ["PREPARING", "CANCELLED"],
+  CONFIRMED: ["PREPARING"],
   PREPARING: ["READY"],
   READY: ["SERVED"],
   SERVED: [],
@@ -16,8 +15,7 @@ export const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
 };
 
 /** Kitchen screen par dikhne wale status */
-export const ACTIVE_KITCHEN_STATUSES: OrderStatus[] = [
-  "CONFIRMED",
-  "PREPARING",
-  "READY",
-];
+export const ACTIVE_KITCHEN_STATUSES: OrderStatus[] = ["CONFIRMED", "PREPARING", "READY"];
+
+/** Ye status wale orders cancel request ke liye eligible hain */
+export const CANCELLABLE_STATUSES: OrderStatus[] = ["CONFIRMED", "PREPARING", "READY"];

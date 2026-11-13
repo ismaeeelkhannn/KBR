@@ -10,12 +10,14 @@
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "db:logs": "docker compose logs -f postgres",
+    "worker": "tsx src/server/worker.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:check": "tsx scripts/check-db.ts",
     "db:seed": "prisma db seed",
     "db:seed:catalog": "tsx prisma/seed-catalog.ts",
     "db:create-owner": "tsx scripts/create-owner.ts",
+    "db:create-staff": "tsx scripts/create-staff.ts",
     "db:studio": "prisma studio"
   },
   "dependencies": {

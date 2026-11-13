@@ -36,12 +36,7 @@ export async function PATCH(
   }
 
   try {
-    const order = await changeOrderStatus(
-      user.id,
-      id,
-      parsed.data.to,
-      parsed.data.reason
-    );
+    const order = await changeOrderStatus(user.id, id, parsed.data.to);
     return NextResponse.json({ ok: true, order });
   } catch (error) {
     if (error instanceof KitchenError) {

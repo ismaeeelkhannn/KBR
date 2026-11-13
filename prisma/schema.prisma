@@ -75,6 +75,11 @@ model User {
   employee     Employee?
   orders       Order[]
   statusEvents OrderStatusEvent[]
+  approvalsRequested Approval[]  @relation("ApprovalRequester")
+  approvalsDecided   Approval[]  @relation("ApprovalDecider")
+  auditLogs          AuditLog[]
+  openedShifts      CashShift[] @relation("ShiftOpener")
+  closedShifts      CashShift[] @relation("ShiftCloser")
 
   @@index([roleId])
 }
@@ -114,6 +119,7 @@ model Branch {
   employees     Employee[]
   cashRegisters CashRegister[]
   orders        Order[]
+  cashShifts    CashShift[]
 }
 
 model UserBranchAccess {
@@ -138,6 +144,7 @@ model CashRegister {
   updatedAt DateTime @updatedAt
 
   branch Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  cashShifts CashShift[]
 
   @@unique([branchId, code])
 }
@@ -309,4 +316,102 @@ model OrderStatusEvent {
   changedBy User  @relation(fields: [changedById], references: [id], onDelete: Restrict)
 
   @@index([orderId, createdAt])
+}
+
+// ---------- Approvals, Outbox, Audit (Batch 9) ----------
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum OutboxStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+model Approval {
+  id            String         @id @default(cuid())
+  type          String         // "ORDER_CANCEL"
+  entityType    String         // "Order"
+  entityId      String
+  status        ApprovalStatus @default(PENDING)
+  reason        String
+  decisionNote  String?
+  requestedById String
+  decidedById   String?
+  createdAt     DateTime       @default(now())
+  decidedAt     DateTime?
+
+  requestedBy User  @relation("ApprovalRequester", fields: [requestedById], references: [id], onDelete: Restrict)
+  decidedBy   User? @relation("ApprovalDecider", fields: [decidedById], references: [id], onDelete: Restrict)
+
+  @@index([entityType, entityId])
+  @@index([status, createdAt])
+}
+
+// Notification ya side-effect ka pakka record. Worker yahin se padhta hai.
+model OutboxEvent {
+  id        String       @id @default(cuid())
+  type      String
+  payload   Json
+  status    OutboxStatus @default(PENDING)
+  attempts  Int          @default(0)
+  lastError String?
+  createdAt DateTime     @default(now())
+  sentAt    DateTime?
+
+  @@index([status, createdAt])
+}
+
+// Append-only. App ko is table par UPDATE/DELETE ka kaam nahi dena.
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String
+  action     String
+  entityType String
+  entityId   String
+  before     Json?
+  after      Json?
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  actor User @relation(fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([entityType, entityId])
+  @@index([actorId, createdAt])
+}
+
+// ---------- Cash shifts (Batch 10) ----------
+// Rule: paisa mein. Shift band hone ke baad uska record change nahi hota.
+
+enum CashShiftStatus {
+  OPEN
+  CLOSED
+}
+
+model CashShift {
+  id                 String          @id @default(cuid())
+  branchId           String
+  cashRegisterId     String
+  openedById         String
+  closedById         String?
+  status             CashShiftStatus @default(OPEN)
+  openingCashPaisa   Int
+  expectedCashPaisa  Int?
+  countedCashPaisa   Int?
+  variancePaisa      Int?
+  varianceReason     String?
+  openedAt           DateTime        @default(now())
+  closedAt           DateTime?
+
+  branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  cashRegister CashRegister @relation(fields: [cashRegisterId], references: [id], onDelete: Restrict)
+  openedBy     User         @relation("ShiftOpener", fields: [openedById], references: [id], onDelete: Restrict)
+  closedBy     User?        @relation("ShiftCloser", fields: [closedById], references: [id], onDelete: Restrict)
+
+  @@index([cashRegisterId, status])
+  @@index([branchId, openedAt])
 }
