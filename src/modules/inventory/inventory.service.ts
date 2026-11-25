@@ -1,9 +1,10 @@
-import type { Prisma } from "@prisma/client";
+﻿import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import {
   userCanAccessBranch,
   userHasPermission,
 } from "@/modules/access-control/permissions";
+import { lockInventoryItems } from "./stock-lock";
 
 export class InventoryError extends Error {
   status: number;
@@ -29,7 +30,6 @@ export async function getStockBalances(userId: string, branchId: string) {
     by: ["inventoryItemId"],
     where: {
       branchId,
-      type: { in: ["PURCHASE", "SALE_DEDUCTION", "ADJUSTMENT"] },
     },
     _sum: { quantityBase: true },
   });
@@ -38,7 +38,7 @@ export async function getStockBalances(userId: string, branchId: string) {
   );
 
   return items.map((item) => ({
-    code: item.code,
+    id: item.id,    code: item.code,
     name: item.name,
     unit: item.unit,
     balance: map.get(item.id) ?? 0,
@@ -94,15 +94,10 @@ export async function deductForOrder(
     left.localeCompare(right)
   );
 
-  // Lock item rows in a stable order so concurrent deductions cannot overspend stock.
-  for (const [inventoryItemId] of requirements) {
-    await tx.$queryRaw<{ id: string }[]>`
-      SELECT "id"
-      FROM "InventoryItem"
-      WHERE "id" = ${inventoryItemId}
-      FOR UPDATE
-    `;
-  }
+  await lockInventoryItems(
+    tx,
+    requirements.map(([inventoryItemId]) => inventoryItemId)
+  );
 
   for (const [inventoryItemId, quantity] of requirements) {
     const inventoryItem = await tx.inventoryItem.findUniqueOrThrow({
@@ -134,3 +129,4 @@ export async function deductForOrder(
     });
   }
 }
+

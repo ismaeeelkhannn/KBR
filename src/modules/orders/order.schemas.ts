@@ -4,6 +4,7 @@ export const createOrderSchema = z.object({
   idempotencyKey: z.string().min(16).max(100),
   branchId: z.string().min(1),
   orderType: z.enum(["DINE_IN", "TAKEAWAY", "DELIVERY"]).default("TAKEAWAY"),
+  customerName: z.string().trim().min(2).max(100).optional(),
   items: z
     .array(
       z.object({

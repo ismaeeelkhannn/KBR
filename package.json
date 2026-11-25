@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "tsx --test src/modules/pos/item-code.test.ts src/modules/admin/admin-users.schemas.test.ts src/modules/admin/admin-roles.schemas.test.ts src/modules/admin/admin-menu.schemas.test.ts src/modules/approvals/approval.schemas.test.ts src/modules/operations/delivery-access.test.ts src/modules/reports/dashboard-metrics.test.ts",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "db:logs": "docker compose logs -f postgres",
@@ -24,9 +25,11 @@
   "dependencies": {
     "@prisma/client": "^6.19.3",
     "argon2": "^0.45.2",
+    "lucide-react": "^1.73.0",
     "next": "16.4.6",
     "react": "19.3.0",
     "react-dom": "19.3.0",
+    "recharts": "^3.10.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {

@@ -118,6 +118,7 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
         branchId: branch.id,
         createdById: userId,
         orderType: input.orderType,
+        customerName: input.customerName ?? null,
         idempotencyKey: input.idempotencyKey,
         subtotalPaisa,
         discountPaisa,

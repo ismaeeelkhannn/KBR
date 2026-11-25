@@ -30,13 +30,13 @@ export async function POST(
   const parsed = cancelRequestSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "Cancel ki wajah (3+ characters) zaroori hai" },
+      { error: "Wajah select karein; Other ke liye custom wajah zaroori hai" },
       { status: 400 }
     );
   }
 
   try {
-    const approval = await requestOrderCancel(user.id, id, parsed.data.reason);
+    const approval = await requestOrderCancel(user.id, id, parsed.data);
     return NextResponse.json({ ok: true, approval }, { status: 201 });
   } catch (error) {
     if (error instanceof ApprovalError) {

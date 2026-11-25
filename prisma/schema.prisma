@@ -20,6 +20,17 @@ enum EmployeeStatus {
   TERMINATED
 }
 
+enum CancellationReasonCode {
+  CUSTOMER_CHANGED_MIND
+  WRONG_ORDER
+  CUSTOMER_NOT_RESPONDING
+  PAYMENT_ISSUE
+  DELIVERY_PROBLEM
+  PREPARATION_DELAY
+  OUT_OF_STOCK
+  OTHER
+}
+
 // ---------- Identity & Access ----------
 
 model Role {
@@ -69,20 +80,23 @@ model User {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  role         Role               @relation(fields: [roleId], references: [id], onDelete: Restrict)
-  branchAccess UserBranchAccess[]
-  sessions     Session[]
-  employee     Employee?
-  orders       Order[]
-  statusEvents OrderStatusEvent[]
-  approvalsRequested Approval[]  @relation("ApprovalRequester")
-  approvalsDecided   Approval[]  @relation("ApprovalDecider")
-  auditLogs          AuditLog[]
-  openedShifts      CashShift[] @relation("ShiftOpener")
-  closedShifts      CashShift[] @relation("ShiftCloser")
-  payments         Payment[]    @relation("PaymentCreator")
-  stockMovements StockMovement[] @relation("StockCreator")
-  recipeVersions RecipeVersion[] @relation("RecipeCreator")
+  role                Role               @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  branchAccess        UserBranchAccess[]
+  sessions            Session[]
+  employee            Employee?
+  orders              Order[]
+  statusEvents        OrderStatusEvent[]
+  approvalsRequested  Approval[]         @relation("ApprovalRequester")
+  approvalsDecided    Approval[]         @relation("ApprovalDecider")
+  auditLogs           AuditLog[]
+  openedShifts        CashShift[]        @relation("ShiftOpener")
+  closedShifts        CashShift[]        @relation("ShiftCloser")
+  payments            Payment[]          @relation("PaymentCreator")
+  stockMovements      StockMovement[]    @relation("StockCreator")
+  deliveryAssignments DeliveryDetail[]   @relation("DeliveryRider")
+  recipeVersions      RecipeVersion[]    @relation("RecipeCreator")
+  managedEmployees    Employee[]         @relation("EmployeeManager")
+  employeeSalaryRecords EmployeeSalary[]  @relation("EmployeeSalaryCreator")
 
   @@index([roleId])
 }
@@ -118,11 +132,11 @@ model Branch {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  userAccess    UserBranchAccess[]
-  employees     Employee[]
-  cashRegisters CashRegister[]
-  orders        Order[]
-  cashShifts    CashShift[]
+  userAccess     UserBranchAccess[]
+  employees      Employee[]
+  cashRegisters  CashRegister[]
+  orders         Order[]
+  cashShifts     CashShift[]
   stockMovements StockMovement[]
 }
 
@@ -147,7 +161,7 @@ model CashRegister {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  branch Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  branch     Branch      @relation(fields: [branchId], references: [id], onDelete: Restrict)
   cashShifts CashShift[]
 
   @@unique([branchId, code])
@@ -160,8 +174,16 @@ model Employee {
   employeeCode       String         @unique
   userId             String?        @unique
   branchId           String
+  departmentId       String?
+  assignedManagerId  String?
   fullName           String
   phone              String?
+  email              String?
+  address            String?
+  cnic               String?
+  profilePictureUrl  String?
+  emergencyContact   String?
+  emergencyPhone     String?
   jobTitle           String
   joiningDate        DateTime
   monthlySalaryPaisa Int
@@ -170,10 +192,49 @@ model Employee {
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
 
-  user   User?  @relation(fields: [userId], references: [id], onDelete: Restrict)
-  branch Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  user             User?             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  branch           Branch            @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  department       EmployeeDepartment? @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  assignedManager  User?             @relation("EmployeeManager", fields: [assignedManagerId], references: [id], onDelete: Restrict)
+  salaryVersions   EmployeeSalary[]
 
   @@index([branchId])
+  @@index([departmentId])
+  @@index([assignedManagerId])
+  @@index([status, branchId])
+  @@index([fullName])
+}
+
+model EmployeeDepartment {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  employees Employee[]
+
+  @@index([isActive])
+}
+
+model EmployeeSalary {
+  id                 String   @id @default(cuid())
+  employeeId         String
+  monthlySalaryPaisa Int
+  effectiveFrom      DateTime
+  effectiveTo        DateTime?
+  createdById        String
+  createdAt          DateTime @default(now())
+  note               String?
+
+  employee  Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  createdBy User     @relation("EmployeeSalaryCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@unique([employeeId, effectiveFrom])
+  @@index([employeeId, effectiveFrom])
 }
 
 // ---------- Catalog (Batch 6) ----------
@@ -219,9 +280,9 @@ model ProductVariant {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  product    Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
-  prices     PriceVersion[]
-  orderItems OrderItem[]
+  product        Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  prices         PriceVersion[]
+  orderItems     OrderItem[]
   recipeVersions RecipeVersion[]
 
   @@index([productId])
@@ -270,6 +331,7 @@ model Order {
   createdById    String
   orderType      OrderType   @default(TAKEAWAY)
   status         OrderStatus @default(CONFIRMED)
+  customerName   String?     @db.VarChar(100)
   idempotencyKey String      @unique
   subtotalPaisa  Int
   discountPaisa  Int         @default(0)
@@ -300,9 +362,9 @@ model OrderItem {
   lineTotalPaisa      Int
   note                String?
 
-  order        Order          @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  variant      ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
-  priceVersion PriceVersion   @relation(fields: [priceVersionId], references: [id], onDelete: Restrict)
+  order         Order          @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  variant       ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  priceVersion  PriceVersion   @relation(fields: [priceVersionId], references: [id], onDelete: Restrict)
   recipeVersion RecipeVersion? @relation(fields: [recipeVersionId], references: [id], onDelete: Restrict)
 
   @@index([orderId])
@@ -324,6 +386,7 @@ model OrderStatusEvent {
   changedBy User  @relation(fields: [changedById], references: [id], onDelete: Restrict)
 
   @@index([orderId, createdAt])
+  @@index([toStatus, createdAt])
 }
 
 // ---------- Approvals, Outbox, Audit (Batch 9) ----------
@@ -341,16 +404,17 @@ enum OutboxStatus {
 }
 
 model Approval {
-  id            String         @id @default(cuid())
-  type          String         // "ORDER_CANCEL"
-  entityType    String         // "Order"
+  id            String                  @id @default(cuid())
+  type          String // "ORDER_CANCEL"
+  entityType    String // "Order"
   entityId      String
-  status        ApprovalStatus @default(PENDING)
+  status        ApprovalStatus          @default(PENDING)
   reason        String
+  reasonCode    CancellationReasonCode?
   decisionNote  String?
   requestedById String
   decidedById   String?
-  createdAt     DateTime       @default(now())
+  createdAt     DateTime                @default(now())
   decidedAt     DateTime?
 
   requestedBy User  @relation("ApprovalRequester", fields: [requestedById], references: [id], onDelete: Restrict)
@@ -358,6 +422,8 @@ model Approval {
 
   @@index([entityType, entityId])
   @@index([status, createdAt])
+  @@index([type, status, decidedAt])
+  @@index([requestedById, decidedAt])
 }
 
 // Notification ya side-effect ka pakka record. Worker yahin se padhta hai.
@@ -401,19 +467,19 @@ enum CashShiftStatus {
 }
 
 model CashShift {
-  id                 String          @id @default(cuid())
-  branchId           String
-  cashRegisterId     String
-  openedById         String
-  closedById         String?
-  status             CashShiftStatus @default(OPEN)
-  openingCashPaisa   Int
-  expectedCashPaisa  Int?
-  countedCashPaisa   Int?
-  variancePaisa      Int?
-  varianceReason     String?
-  openedAt           DateTime        @default(now())
-  closedAt           DateTime?
+  id                String          @id @default(cuid())
+  branchId          String
+  cashRegisterId    String
+  openedById        String
+  closedById        String?
+  status            CashShiftStatus @default(OPEN)
+  openingCashPaisa  Int
+  expectedCashPaisa Int?
+  countedCashPaisa  Int?
+  variancePaisa     Int?
+  varianceReason    String?
+  openedAt          DateTime        @default(now())
+  closedAt          DateTime?
 
   branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
   cashRegister CashRegister @relation(fields: [cashRegisterId], references: [id], onDelete: Restrict)
@@ -442,16 +508,16 @@ enum PaymentStatus {
 
 // Ek order ki ek hi payment (abhi partial payment nahi). Reversal ke liye status badlega, row delete nahi hogi.
 model Payment {
-  id              String        @id @default(cuid())
-  orderId         String        @unique
-  cashShiftId     String
-  method          PaymentMethod
-  status          PaymentStatus @default(COMPLETED)
-  amountPaisa     Int
-  reference       String?
-  idempotencyKey  String        @unique
-  createdById     String
-  createdAt       DateTime      @default(now())
+  id             String        @id @default(cuid())
+  orderId        String        @unique
+  cashShiftId    String
+  method         PaymentMethod
+  status         PaymentStatus @default(COMPLETED)
+  amountPaisa    Int
+  reference      String?
+  idempotencyKey String        @unique
+  createdById    String
+  createdAt      DateTime      @default(now())
 
   order     Order     @relation(fields: [orderId], references: [id], onDelete: Restrict)
   cashShift CashShift @relation(fields: [cashShiftId], references: [id], onDelete: Restrict)
@@ -464,6 +530,7 @@ model Payment {
 // Unit: g, ml, pcs (base units). Quantities integer hain.
 
 enum StockMovementType {
+  STORE_ISSUE
   PURCHASE
   SALE_DEDUCTION
   WASTAGE
@@ -474,11 +541,12 @@ model InventoryItem {
   id        String   @id @default(cuid())
   code      String   @unique
   name      String
-  unit      String   // "g", "ml", "pcs"
+  unit      String // "g", "ml", "pcs"
   createdAt DateTime @default(now())
 
   recipeVersionLines RecipeVersionLine[]
-  stockMovements StockMovement[]
+  stockMovements     StockMovement[]
+  purchaseLines      PurchaseLine[]
 }
 
 // Append-only ledger. Quantity negative = stock out, positive = stock in.
@@ -512,10 +580,10 @@ model RecipeVersion {
   createdById String
   createdAt   DateTime @default(now())
 
-  variant     ProductVariant     @relation(fields: [variantId], references: [id], onDelete: Restrict)
-  createdBy   User               @relation("RecipeCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  lines       RecipeVersionLine[]
-  orderItems  OrderItem[]
+  variant    ProductVariant      @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  createdBy  User                @relation("RecipeCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  lines      RecipeVersionLine[]
+  orderItems OrderItem[]
 
   @@unique([variantId, version])
 }
@@ -527,7 +595,205 @@ model RecipeVersionLine {
   quantityBase    Int
 
   recipeVersion RecipeVersion @relation(fields: [recipeVersionId], references: [id], onDelete: Restrict)
-  inventoryItem InventoryItem  @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
 
   @@unique([recipeVersionId, inventoryItemId])
 }
+
+// ---------- Purchases and expenses (Batch 13) ----------
+// Financial records use paisa and are retained rather than deleted.
+
+model Purchase {
+  id             String         @id @default(cuid())
+  branchId       String
+  supplierName   String?        @db.VarChar(120)
+  invoiceNo      String?        @db.VarChar(60)
+  totalPaisa     Int
+  idempotencyKey String         @unique
+  createdById    String
+  createdAt      DateTime       @default(now())
+  lines          PurchaseLine[]
+
+  @@index([branchId, createdAt])
+}
+
+model PurchaseLine {
+  id              String        @id @default(cuid())
+  purchaseId      String
+  purchase        Purchase      @relation(fields: [purchaseId], references: [id], onDelete: Restrict)
+  inventoryItemId String
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+  quantityBase    Int
+  lineTotalPaisa  Int
+
+  @@index([purchaseId])
+}
+
+model Expense {
+  id             String   @id @default(cuid())
+  branchId       String
+  category       String   @db.VarChar(60)
+  description    String   @db.VarChar(200)
+  amountPaisa    Int
+  expenseDate    DateTime
+  idempotencyKey String   @unique
+  createdById    String
+  createdAt      DateTime @default(now())
+
+  @@index([branchId, expenseDate])
+}
+
+model DailyClosing {
+  id             String   @id @default(cuid())
+  branchId       String
+  businessDate   String   @db.VarChar(10)
+  salesPaisa     Int
+  expensesPaisa  Int
+  purchasesPaisa Int
+  snapshot       Json
+  closedById     String
+  closedAt       DateTime @default(now())
+
+  @@unique([branchId, businessDate])
+}
+
+enum ComplaintStatus {
+  OPEN
+  IN_REVIEW
+  RESOLVED
+  REJECTED
+}
+
+model Complaint {
+  id           String           @id @default(cuid())
+  branchId     String
+  orderId      String?
+  customerName String?          @db.VarChar(100)
+  phone        String?          @db.VarChar(20)
+  category     String           @db.VarChar(60)
+  description  String           @db.VarChar(1000)
+  status       ComplaintStatus  @default(OPEN)
+  resolution   String?          @db.VarChar(500)
+  resolvedById String?
+  resolvedAt   DateTime?
+  createdById  String
+  createdAt    DateTime         @default(now())
+  events       ComplaintEvent[]
+
+  @@index([branchId, status])
+}
+
+model ComplaintEvent {
+  id          String           @id @default(cuid())
+  complaintId String
+  complaint   Complaint        @relation(fields: [complaintId], references: [id], onDelete: Restrict)
+  fromStatus  ComplaintStatus?
+  toStatus    ComplaintStatus
+  note        String           @db.VarChar(500)
+  changedById String
+  createdAt   DateTime         @default(now())
+
+  @@index([complaintId])
+}
+
+enum DeliveryStatus {
+  PENDING
+  DISPATCHED
+  DELIVERED
+  FAILED
+}
+
+model DeliveryDetail {
+  id           String         @id @default(cuid())
+  orderId      String         @unique
+  branchId     String
+  customerName String         @db.VarChar(100)
+  phone        String         @db.VarChar(20)
+  address      String         @db.VarChar(300)
+  riderUserId  String?
+  riderName    String?        @db.VarChar(100)
+  status       DeliveryStatus @default(PENDING)
+  dispatchedAt DateTime?
+  deliveredAt  DateTime?
+  createdAt    DateTime       @default(now())
+
+  rider User? @relation("DeliveryRider", fields: [riderUserId], references: [id], onDelete: Restrict)
+
+  @@index([branchId, status])
+  @@index([riderUserId, status])
+}
+enum StoreRequisitionStatus {
+  REQUESTED
+  APPROVED
+  PARTIAL
+  REJECTED
+  ISSUED
+  CANCELLED
+}
+
+model StoreRequisition {
+  id                      String                 @id @default(cuid())
+  branchId                String
+  requisitionNo           String
+  requestedById           String
+  requesterEmployeeId     String?
+  purpose                 String?
+  status                  StoreRequisitionStatus @default(REQUESTED)
+  totalPaisa              Int                    @default(0)
+  requiresManagerApproval Boolean                @default(false)
+  approvedById            String?
+  approvedAt              DateTime?
+  managerApprovedById     String?
+  managerApprovedAt       DateTime?
+  rejectReason            String?
+  issuedById              String?
+  issuedAt                DateTime?
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
+  lines                   StoreRequisitionLine[]
+  voucher                 StoreIssueVoucher?
+
+  @@unique([branchId, requisitionNo])
+  @@index([branchId, status])
+  @@index([requestedById])
+}
+
+model StoreRequisitionLine {
+  id              String           @id @default(cuid())
+  requisitionId   String
+  requisition     StoreRequisition @relation(fields: [requisitionId], references: [id], onDelete: Restrict)
+  inventoryItemId String
+  requestedQty    Int
+  approvedQty     Int              @default(0)
+  issuedQty       Int              @default(0)
+  unitCostPaisa   Int              @default(0)
+  lineTotalPaisa  Int              @default(0)
+  note            String?
+
+  @@index([requisitionId])
+  @@index([inventoryItemId])
+}
+
+model StoreIssueVoucher {
+  id              String           @id @default(cuid())
+  branchId        String
+  voucherNo       String
+  requisitionId   String           @unique
+  requisition     StoreRequisition @relation(fields: [requisitionId], references: [id], onDelete: Restrict)
+  totalPaisa      Int
+  issuedById      String
+  receivedById    String
+  verifyMethod    String
+  createdAt       DateTime         @default(now())
+
+  @@unique([branchId, voucherNo])
+}
+
+model StoreStaffPin {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  pinHash   String
+  updatedAt DateTime @updatedAt
+}
+
+
