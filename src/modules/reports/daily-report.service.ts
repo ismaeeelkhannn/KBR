@@ -6,6 +6,7 @@ import {
 } from "@/modules/access-control/permissions";
 import { writeAudit } from "@/modules/audit/audit";
 import { FinanceError } from "@/modules/finance/finance.service";
+import { closingDateDecision } from "./closing-date";
 
 function dayRange(date: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
@@ -125,6 +126,12 @@ export async function closeDay(
 ) {
   await assertAccess(userId, branchId, "reports.close");
   dayRange(date);
+  const dateDecision = closingDateDecision(
+    date,
+    new Date(),
+    process.env.APP_TIMEZONE ?? "Asia/Karachi",
+  );
+  if (!dateDecision.allowed) throw new FinanceError(422, dateDecision.reason);
 
   const already = await db.dailyClosing.findUnique({
     where: { branchId_businessDate: { branchId, businessDate: date } },

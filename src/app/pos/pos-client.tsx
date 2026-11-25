@@ -2,8 +2,9 @@
 
 import { useMemo, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, Minus, Plus, Search, ShoppingBag, Trash2 } from "lucide-react";
+import { findItemByCode } from "@/modules/pos/item-code";
 
-export type PosVariant = { id: string; name: string; pricePaisa: number; isVerified: boolean };
+export type PosVariant = { id: string; code: string; name: string; pricePaisa: number; isVerified: boolean };
 export type PosProduct = { id: string; name: string; variants: PosVariant[] };
 export type PosCategory = { id: string; name: string; products: PosProduct[] };
 
@@ -15,6 +16,7 @@ const rs = (p: number) => "Rs. " + (p / 100).toLocaleString("en-PK", { maximumFr
 export function PosClient({ branchId, categories }: { branchId: string; categories: PosCategory[] }) {
   const [activeCat, setActiveCat] = useState(categories[0]?.id ?? "");
   const [query, setQuery] = useState("");
+  const [codeInput, setCodeInput] = useState("");
   const [cart, setCart] = useState<CartLine[]>([]);
   const [orderType, setOrderType] = useState<OrderType>("TAKEAWAY");
   const [submitting, setSubmitting] = useState(false);
@@ -43,6 +45,30 @@ export function PosClient({ branchId, categories }: { branchId: string; categori
         return prev.map((l, idx) => (idx === i ? { ...l, quantity: Math.min(l.quantity + 1, 50) } : l));
       return [...prev, { variantId: v.id, name: `${productName} · ${v.name}`, pricePaisa: v.pricePaisa, quantity: 1, note: "" }];
     });
+  }
+
+  // Staff type the memorized item code; lookup covers every category, not just the active tab.
+  function submitCode() {
+    const flat = categories.flatMap((c) =>
+      c.products.flatMap((p) => p.variants.map((v) => ({ ...v, productName: p.name }))),
+    );
+    const result = findItemByCode(flat, codeInput);
+    if (result.status === "empty") return;
+    if (result.status === "not_found") {
+      setMessage({ kind: "err", text: `Code "${codeInput.trim()}" nahi mila` });
+      return;
+    }
+    if (result.status === "ambiguous") {
+      setMessage({ kind: "err", text: `Code "${codeInput.trim()}" ek se zyada items par hai; admin se check karein` });
+      return;
+    }
+    const item = result.item;
+    if (!item.isVerified) {
+      setMessage({ kind: "err", text: `${item.name} ka price verify nahi hua; order nahi ho sakta` });
+      return;
+    }
+    addToCart(item, item.productName);
+    setCodeInput("");
   }
 
   function changeQty(variantId: string, delta: number) {
@@ -105,13 +131,29 @@ export function PosClient({ branchId, categories }: { branchId: string; categori
   return (
     <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_380px]">
       <div className="space-y-4">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Item search karein"
+              className="w-full rounded-xl border border-[#1f2a44] bg-[#151d33] py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-slate-500 focus:border-orange-500 focus:outline-none"
+            />
+          </div>
           <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Item search karein"
-            className="w-full rounded-xl border border-[#1f2a44] bg-[#151d33] py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-slate-500 focus:border-orange-500 focus:outline-none"
+            value={codeInput}
+            onChange={(e) => setCodeInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                submitCode();
+              }
+            }}
+            aria-label="Item code"
+            placeholder="Item code + Enter"
+            autoComplete="off"
+            className="w-44 rounded-xl border border-[#1f2a44] bg-[#151d33] px-4 py-2.5 text-sm uppercase text-white placeholder:normal-case placeholder:text-slate-500 focus:border-orange-500 focus:outline-none"
           />
         </div>
 

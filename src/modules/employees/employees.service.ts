@@ -1,8 +1,14 @@
+import { randomBytes } from "node:crypto";
 import { Prisma, type EmployeeStatus } from "@prisma/client";
 import type { z } from "zod";
 import { db } from "@/lib/db";
 import { userHasPermission, userCanAccessBranch } from "@/modules/access-control/permissions";
 import { writeAudit } from "@/modules/audit/audit";
+import {
+  redactAuditSnapshot,
+  salaryChanged,
+  stripPii,
+} from "./employee-privacy";
 import { FinanceError } from "@/modules/finance/finance.service";
 import type {
   employeeCreateSchema,
@@ -80,7 +86,7 @@ async function validateLinks(
 
 function makeEmployeeCode() {
   const t = Date.now().toString(36).toUpperCase();
-  const r = Math.random().toString(36).slice(2, 6).toUpperCase();
+  const r = randomBytes(3).toString("hex").toUpperCase();
   return `EMP-${t}-${r}`;
 }
 
@@ -126,6 +132,15 @@ export async function createEmployee(userId: string, input: CreateInput) {
         entityId: e.id,
         after: { employeeCode: e.employeeCode, branchId: e.branchId, jobTitle: e.jobTitle },
       });
+      await tx.employeeSalary.create({
+        data: {
+          employeeId: e.id,
+          monthlySalaryPaisa: input.monthlySalaryPaisa,
+          effectiveFrom: e.joiningDate,
+          createdById: userId,
+          note: "Initial salary",
+        },
+      });
       return e;
     });
   } catch (e) {
@@ -164,7 +179,8 @@ export async function listEmployees(userId: string, f: ListInput) {
     canSeeSalary(userId),
   ]);
 
-  const items = rows.map((r) => stripSalary(r, seeSalary));
+  const canSeePii = await hasAny(userId, ["employees.manage"]);
+  const items = rows.map((r) => stripPii(stripSalary(r, seeSalary), canSeePii));
   return { total, page: f.page, pageSize: f.pageSize, items, employees: items };
 }
 
@@ -180,7 +196,8 @@ export async function getEmployeeProfile(userId: string, id: string) {
   });
   if (!e || e.deletedAt) throw new FinanceError(404, "Employee nahi mila");
   await requireBranch(userId, e.branchId, "employee.view");
-  return stripSalary(e, await canSeeSalary(userId));
+  const canSeePii = await hasAny(userId, ["employees.manage"]);
+  return stripPii(stripSalary(e, await canSeeSalary(userId)), canSeePii);
 }
 
 function buildUpdate(input: UpdateInput): Prisma.EmployeeUpdateInput {
@@ -218,23 +235,44 @@ export async function updateEmployee(userId: string, id: string, input: UpdateIn
 
   const keys = Object.keys(input) as (keyof UpdateInput)[];
   const dbKey = (k: string) => FIELD_MAP[k] ?? k;
-  const beforeSnap = Object.fromEntries(
-    keys.map((k) => [k, (before as Record<string, unknown>)[dbKey(k)] ?? null]),
+  const beforeSnap = redactAuditSnapshot(
+    Object.fromEntries(
+      keys.map((k) => [k, (before as Record<string, unknown>)[dbKey(k)] ?? null]),
+    ),
   );
 
   try {
     return await db.$transaction(async (tx) => {
       const updated = await tx.employee.update({ where: { id }, data: buildUpdate(input) });
-      const afterSnap = Object.fromEntries(
-        keys.map((k) => [k, (updated as Record<string, unknown>)[dbKey(k)] ?? null]),
+      const afterSnap = redactAuditSnapshot(
+        Object.fromEntries(
+          keys.map((k) => [k, (updated as Record<string, unknown>)[dbKey(k)] ?? null]),
+        ),
       );
+      if (salaryChanged(before.monthlySalaryPaisa, input.monthlySalaryPaisa)) {
+        const now = new Date();
+        // Close the open salary row, then append the new one. Rows are never edited.
+        await tx.employeeSalary.updateMany({
+          where: { employeeId: id, effectiveTo: null },
+          data: { effectiveTo: now },
+        });
+        await tx.employeeSalary.create({
+          data: {
+            employeeId: id,
+            monthlySalaryPaisa: input.monthlySalaryPaisa as number,
+            effectiveFrom: now,
+            createdById: userId,
+            note: "Salary change",
+          },
+        });
+      }
       await writeAudit(tx, {
         actorId: userId,
         action: "EMPLOYEE_UPDATED",
         entityType: "Employee",
         entityId: id,
-        before: beforeSnap,
-        after: afterSnap,
+        before: beforeSnap as Prisma.InputJsonObject,
+        after: afterSnap as Prisma.InputJsonObject,
       });
       return updated;
     });
@@ -249,12 +287,25 @@ export async function changeEmployeeStatus(
   to: "ACTIVE" | "INACTIVE" | "TERMINATED",
   reason?: string,
 ) {
-  const emp = await db.employee.findUnique({ where: { id } });
+  const emp = await db.employee.findUnique({
+    where: { id },
+    include: { user: { select: { id: true, isActive: true, role: { select: { code: true } } } } },
+  });
   if (!emp || emp.deletedAt) throw new FinanceError(404, "Employee nahi mila");
   await requireBranch(userId, emp.branchId, "employee.deactivate");
 
   if (!EMP_NEXT[emp.status].includes(to))
     throw new FinanceError(409, `${emp.status} se ${to} allowed nahi hai`);
+
+  // A leaving employee must lose login access. Keep the linked account
+  // consistent with the employee status in the same transaction.
+  const linked = to !== "ACTIVE" ? emp.user : null;
+  if (linked) {
+    if (linked.id === userId)
+      throw new FinanceError(409, "Apna employee record deactivate nahi kar sakte");
+    if (linked.role.code === "OWNER")
+      throw new FinanceError(409, "OWNER account wale employee ka status yahan se nahi badal sakte");
+  }
 
   return db.$transaction(async (tx) => {
     const res = await tx.employee.updateMany({
@@ -263,13 +314,30 @@ export async function changeEmployeeStatus(
     });
     if (res.count === 0) throw new FinanceError(409, "Status abhi badal chuka hai, dobara try karein");
 
+    if (linked && linked.isActive) {
+      await tx.user.update({ where: { id: linked.id }, data: { isActive: false } });
+      await tx.session.updateMany({
+        where: { userId: linked.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      await writeAudit(tx, {
+        actorId: userId,
+        action: "USER_DEACTIVATED_BY_EMPLOYEE_STATUS",
+        entityType: "User",
+        entityId: linked.id,
+        before: { isActive: true },
+        after: { isActive: false, employeeId: id, employeeStatus: to },
+        reason,
+      });
+    }
+
     await writeAudit(tx, {
       actorId: userId,
       action: "EMPLOYEE_STATUS_CHANGED",
       entityType: "Employee",
       entityId: id,
       before: { status: emp.status },
-      after: { status: to },
+      after: { status: to, linkedUserDeactivated: Boolean(linked?.isActive) },
       reason,
     });
     return tx.employee.findUnique({ where: { id } });

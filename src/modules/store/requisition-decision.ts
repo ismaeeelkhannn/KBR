@@ -5,6 +5,7 @@ import {
   userHasPermission,
 } from "@/modules/access-control/permissions";
 import { StoreError } from "./store.service";
+import { onHandWhere } from "@/modules/inventory/on-hand";
 
 export const decisionSchema = z.object({
   decision: z.enum(["APPROVE", "REJECT"]),
@@ -93,10 +94,14 @@ export async function decideRequisition(
     if (p.approvedQty === 0) continue;
     const line = lineById.get(p.lineId)!;
     const aggregate = await db.stockMovement.aggregate({
-      where: { branchId: requisition.branchId, inventoryItemId: line.inventoryItemId },
+      where: {
+        branchId: requisition.branchId,
+        inventoryItemId: line.inventoryItemId,
+        ...onHandWhere,
+      },
       _sum: { quantityBase: true },
     });
-    const available = aggregate._sum.quantityBase ?? 0;
+    const available = aggregate._sum?.quantityBase ?? 0;
     if (p.approvedQty > available) {
       const item = itemById.get(line.inventoryItemId);
       throw new StoreError(

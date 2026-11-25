@@ -1,4 +1,5 @@
-﻿import type { Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
+import { onHandWhere } from "@/modules/inventory/on-hand";
 import { db } from "@/lib/db";
 import {
   userCanAccessBranch,
@@ -30,11 +31,12 @@ export async function getStockBalances(userId: string, branchId: string) {
     by: ["inventoryItemId"],
     where: {
       branchId,
+      ...onHandWhere,
     },
     _sum: { quantityBase: true },
   });
   const map = new Map(
-    sums.map((sum) => [sum.inventoryItemId, sum._sum.quantityBase ?? 0])
+    sums.map((sum) => [sum.inventoryItemId, sum._sum?.quantityBase ?? 0])
   );
 
   return items.map((item) => ({
@@ -104,10 +106,10 @@ export async function deductForOrder(
       where: { id: inventoryItemId },
     });
     const aggregate = await tx.stockMovement.aggregate({
-      where: { branchId, inventoryItemId },
+      where: { branchId, inventoryItemId, ...onHandWhere },
       _sum: { quantityBase: true },
     });
-    const available = aggregate._sum.quantityBase ?? 0;
+    const available = aggregate._sum?.quantityBase ?? 0;
 
     if (available < quantity) {
       throw new InventoryError(
