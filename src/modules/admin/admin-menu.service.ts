@@ -252,7 +252,7 @@ export async function createMenuProduct(
               prices: {
                 create: {
                   amountPaisa: inputVariant.pricePaisa,
-                  isVerified: true,
+                  isVerified: false,
                   note: "Admin menu entry",
                 },
               },
@@ -372,7 +372,7 @@ export async function createMenuVariant(
             prices: {
               create: {
                 amountPaisa: input.pricePaisa,
-                isVerified: true,
+                isVerified: false,
                 note: "Admin menu entry",
               },
             },
@@ -437,15 +437,16 @@ export async function updateMenuVariant(
       const currentPrice = before.prices[0];
       const shouldCreatePrice =
         input.pricePaisa !== undefined &&
-        (currentPrice?.amountPaisa !== input.pricePaisa ||
-          currentPrice?.isVerified === false);
+        currentPrice?.amountPaisa !== input.pricePaisa;
 
       if (shouldCreatePrice && input.pricePaisa !== undefined) {
+        // Price changes are never self-verified. An OWNER must verify them
+        // via verifyMenuPrice before the item can be ordered.
         await tx.priceVersion.create({
           data: {
             variantId,
             amountPaisa: input.pricePaisa,
-            isVerified: true,
+            isVerified: false,
             note: "Admin menu price update",
           },
         });
@@ -456,7 +457,7 @@ export async function updateMenuVariant(
         ? input.pricePaisa
         : (currentPrice?.amountPaisa ?? null);
       const nextPriceVerified = shouldCreatePrice
-        ? true
+        ? false
         : (currentPrice?.isVerified ?? false);
       await writeAudit(tx, {
         actorId,
@@ -483,6 +484,54 @@ export async function updateMenuVariant(
         pricePaisa: nextPricePaisa,
         priceVerified: nextPriceVerified,
       };
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+  );
+}
+
+async function assertOwner(actorId: string) {
+  const actor = await db.user.findUnique({
+    where: { id: actorId },
+    select: { role: { select: { code: true } } },
+  });
+  if (actor?.role.code !== "OWNER") {
+    throw new FinanceError(403, "Price verify sirf OWNER kar sakta hai");
+  }
+}
+
+/**
+ * Marks the currently effective price of a variant as verified.
+ * Restricted to the OWNER role: a price is what the customer pays, so a
+ * second, independent approver must confirm it before it is orderable.
+ */
+export async function verifyMenuPrice(actorId: string, variantId: string) {
+  await assertOwner(actorId);
+  return db.$transaction(
+    async (tx: Prisma.TransactionClient) => {
+      const current = await tx.priceVersion.findFirst({
+        where: { variantId, effectiveFrom: { lte: new Date() } },
+        orderBy: { effectiveFrom: "desc" },
+        select: { id: true, amountPaisa: true, isVerified: true },
+      });
+      if (!current) throw new FinanceError(404, "Is item ka price set nahi hai");
+      if (current.isVerified) {
+        return { priceVersionId: current.id, amountPaisa: current.amountPaisa, alreadyVerified: true };
+      }
+
+      const res = await tx.priceVersion.updateMany({
+        where: { id: current.id, isVerified: false },
+        data: { isVerified: true },
+      });
+      if (res.count === 0) throw new FinanceError(409, "Price abhi badal chuka hai, dobara check karein");
+
+      await writeAudit(tx, {
+        actorId,
+        action: "MENU_PRICE_VERIFIED",
+        entityType: "ProductVariant",
+        entityId: variantId,
+        after: { priceVersionId: current.id, pricePaisa: current.amountPaisa, priceVerified: true },
+      });
+      return { priceVersionId: current.id, amountPaisa: current.amountPaisa, alreadyVerified: false };
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
   );

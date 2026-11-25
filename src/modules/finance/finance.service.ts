@@ -194,15 +194,3 @@ export async function createExpense(userId: string, input: ExpenseInput) {
   }
 }
 
-export async function stockBalance(branchId: string, inventoryItemId: string) {
-  const rows = await db.stockMovement.groupBy({
-    by: ["type"],
-    where: {
-      branchId,
-      inventoryItemId,
-      type: { in: ["PURCHASE", "SALE_DEDUCTION", "ADJUSTMENT"] },
-    },
-    _sum: { quantityBase: true },
-  });
-  return rows.reduce((sum, row) => sum + (row._sum.quantityBase ?? 0), 0);
-}

@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import {
@@ -19,7 +20,7 @@ export class OrderError extends Error {
 
 /** Order number: branch ke andar unique. Format: ORD-<time>-<random> */
 function makeOrderNumber(): string {
-  const random = Math.random().toString(36).slice(2, 6).toUpperCase();
+  const random = randomBytes(3).toString("hex").toUpperCase();
   return `ORD-${Date.now().toString(36).toUpperCase()}-${random}`;
 }
 
@@ -81,12 +82,14 @@ export async function createOrder(userId: string, input: CreateOrderInput) {
       throw new OrderError(`Item available nahi: ${item.variantId}`, 422);
     }
 
+    // Only OWNER-verified prices are orderable. An unverified price change
+    // must not reach customers.
     const price = await db.priceVersion.findFirst({
-      where: { variantId: variant.id, effectiveFrom: { lte: now } },
+      where: { variantId: variant.id, effectiveFrom: { lte: now }, isVerified: true },
       orderBy: { effectiveFrom: "desc" },
     });
     if (!price) {
-      throw new OrderError(`Price set nahi: ${variant.name}`, 422);
+      throw new OrderError(`Verified price set nahi (OWNER verify zaroori): ${variant.name}`, 422);
     }
 
     const recipe = await latestRecipeVersion(variant.id);

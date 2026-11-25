@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { onHandWhere } from "@/modules/inventory/on-hand";
 import { db } from "@/lib/db";
 import {
   userCanAccessBranch,
@@ -98,10 +99,10 @@ export async function issueRequisition(
     for (const p of plan) {
       const itemId = p.line.inventoryItemId;
       const stock = await tx.stockMovement.aggregate({
-        where: { branchId: current.branchId, inventoryItemId: itemId },
+        where: { branchId: current.branchId, inventoryItemId: itemId, ...onHandWhere },
         _sum: { quantityBase: true },
       });
-      const available = stock._sum.quantityBase ?? 0;
+      const available = stock._sum?.quantityBase ?? 0;
       if (p.issueQty > available) {
         const item = itemById.get(itemId);
         throw new StoreError(
@@ -114,7 +115,7 @@ export async function issueRequisition(
         where: { inventoryItemId: itemId },
         _sum: { quantityBase: true, lineTotalPaisa: true },
       });
-      const qty = purchased._sum.quantityBase ?? 0;
+      const qty = purchased._sum?.quantityBase ?? 0;
       unitCost.set(
         p.line.id,
         qty > 0 ? Math.round((purchased._sum.lineTotalPaisa ?? 0) / qty) : 0

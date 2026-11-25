@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --test src/modules/pos/item-code.test.ts src/modules/admin/admin-users.schemas.test.ts src/modules/admin/admin-roles.schemas.test.ts src/modules/admin/admin-menu.schemas.test.ts src/modules/approvals/approval.schemas.test.ts src/modules/operations/delivery-access.test.ts src/modules/reports/dashboard-metrics.test.ts",
+    "test": "tsx --test src/modules/pos/item-code.test.ts src/modules/admin/admin-users.schemas.test.ts src/modules/admin/admin-roles.schemas.test.ts src/modules/admin/admin-menu.schemas.test.ts src/modules/admin/owner-guard.test.ts src/modules/auth/login-rate-key.test.ts src/modules/inventory/on-hand.test.ts src/modules/reports/closing-date.test.ts src/modules/employees/employee-privacy.test.ts src/modules/approvals/approval.schemas.test.ts src/modules/operations/delivery-access.test.ts src/modules/reports/dashboard-metrics.test.ts",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "db:logs": "docker compose logs -f postgres",

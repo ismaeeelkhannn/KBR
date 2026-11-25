@@ -4,6 +4,7 @@ import { userHasPermission } from "@/modules/access-control/permissions";
 import { writeAudit } from "@/modules/audit/audit";
 import { hashPassword } from "@/modules/auth/password";
 import { FinanceError } from "@/modules/finance/finance.service";
+import { canAssignRole, canModifyExistingUser } from "./owner-guard";
 import type {
   AdminUserCreateInput,
   AdminUserUpdateInput,
@@ -79,6 +80,23 @@ async function ensureUsernameAvailable(
   });
   if (existing) {
     throw new FinanceError(409, "Ye username pehle se use ho raha hai");
+  }
+}
+
+async function getActorRoleCode(
+  tx: Prisma.TransactionClient,
+  actorId: string,
+): Promise<string | null> {
+  const actor = await tx.user.findUnique({
+    where: { id: actorId },
+    select: { role: { select: { code: true } } },
+  });
+  return actor?.role.code ?? null;
+}
+
+function assertGuard(decision: { allowed: boolean; reason?: string }) {
+  if (!decision.allowed) {
+    throw new FinanceError(403, decision.reason ?? "Is kaam ki permission nahi hai");
   }
 }
 
@@ -172,6 +190,9 @@ export async function createAdminUser(
       async (tx) => {
         await ensureUsernameAvailable(tx, input.username);
         const role = await ensureRoleExists(tx, input.roleId);
+        assertGuard(
+          canAssignRole(await getActorRoleCode(tx, actorId), role.code),
+        );
         await assertBranchIds(tx, input.branchIds);
         await assertActorCanManageBranchIds(tx, actorId, input.branchIds);
 
@@ -259,10 +280,15 @@ export async function updateAdminUser(
           throw new FinanceError(404, "User nahi mila");
         }
 
+        const actorRoleCode = await getActorRoleCode(tx, actorId);
+        assertGuard(canModifyExistingUser(actorRoleCode, before.role.code));
         const nextRole =
           input.roleId === undefined
             ? before.role
             : await ensureRoleExists(tx, input.roleId);
+        if (input.roleId !== undefined) {
+          assertGuard(canAssignRole(actorRoleCode, nextRole.code));
+        }
         const nextActive = input.isActive ?? before.isActive;
         const branchIds =
           input.branchIds ?? before.branchAccess.map((access) => access.branch.id);
